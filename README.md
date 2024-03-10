@@ -1,3 +1,4 @@
 # mango_sorting
 
-- Using Python OpenCV with PyFirmata for arduino servo controlling
+- Identify the mango either small, medium and large.
+- Classify the maturity of mango either ripe or raw.
