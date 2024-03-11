@@ -13,103 +13,70 @@ firebase_admin.initialize_app(cred, {
 ripe_color_range = (np.array([15, 100, 100]), np.array([45, 255, 255]))  # Yellow range in HSV
 raw_color_range = (np.array([45, 100, 100]), np.array([85, 255, 255]))   # Green range in HSV
 
-size_categories = ["small", "medium", "large"]
-
 def classify_color(hsv_value):
-    if (ripe_color_range[0][0] <= hsv_value[0] <= ripe_color_range[1][0]) or \
-       (ripe_color_range[0][0] <= (hsv_value[0] + 180) <= ripe_color_range[1][0]):
+    if ripe_color_range[0][0] <= hsv_value[0] <= ripe_color_range[1][0]:
         return "Ripe"
-    elif (raw_color_range[0][0] <= hsv_value[0] <= raw_color_range[1][0]) or \
-         (raw_color_range[0][0] <= (hsv_value[0] + 180) <= raw_color_range[1][0]):
+    elif raw_color_range[0][0] <= hsv_value[0] <= raw_color_range[1][0]:
         return "Raw"
-    else:
-        return "Unknown"
+    return "Unknown"
 
 def classify_size(contour_area):
-    if contour_area <= 7:
+    # Placeholder method for size classification based on contour area
+    # Change the size for real size of mango this is for test only
+    if contour_area < 10000:  # Placeholder values for small size
         return "small"
-    elif 8 <= contour_area <= 12:
+    elif 10000 <= contour_area <= 30000:  # Placeholder values for medium size
         return "medium"
     else:
         return "large"
 
-# Calibration
-def calibrate_conversion_factor(image_path, known_size_cm):
-    img = cv2.imread(image_path)
-    
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blurred, 30, 100)  # Adjust parameters as needed
-    contours, _ = cv2.findContours(edges.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    
-    widths = []
-    heights = []
-    
-    # Loop over the contours
-    for contour in contours:
-        area = cv2.contourArea(contour)
-        if area < 100:
-            continue
-        x, y, w, h = cv2.boundingRect(contour)
-        widths.append(w)
-        heights.append(h)
-    avg_width = np.mean(widths)
-    avg_height = np.mean(heights)
-    avg_reference_size_pixels = (avg_width + avg_height) / 2  # Use average width and height
-    conversion_factor = known_size_cm / avg_reference_size_pixels
-    
-    return conversion_factor
-
-conversion_factor = 0.1  # Placeholder value, replace with calibrated value
+def update_database(fruit_type, fruit_size):
+    if fruit_type == "Unknown":
+        print("Skipped updating database for unknown fruit type.")
+        return 
+    maturity_status = {"Ripe": True, "Raw": False} if fruit_type == "Ripe" else {"Ripe": False, "Raw": True}
+    db.reference('/mango/1/ripe/maturity').set(maturity_status["Ripe"])
+    db.reference('/mango/1/raw/maturity').set(maturity_status["Raw"])
+    if maturity_status[fruit_type]:
+        size_path = f'/mango/1/{fruit_type.lower()}/size'
+        db.reference(size_path).set(fruit_size)
 
 valid_camera = False
-for camera_index in range(4):  
+for camera_index in range(4):
     cap = cv2.VideoCapture(camera_index)
     if cap.isOpened():
         valid_camera = True
         print(f"Using camera index: {camera_index}")
         break
-
 if not valid_camera:
     print("Error: Could not find a valid camera index.")
     exit()
 
-ref_status = db.reference('/mango/1/status')
-ref_size = db.reference('/mango/1/size')
-
 while True:
     ret, frame = cap.read()
-
     if not ret:
-        print("Error: Failed to retrieve frame from video capture.")
-        break
+        break  # Break the loop if we can't get a frame
 
     hsvImage = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-    fruit_status = "Unknown"
-    fruit_size = "Unknown"
-
-    for color_range in [ripe_color_range, raw_color_range]:
+    for color_range, label in zip([ripe_color_range, raw_color_range], ["Ripe", "Raw"]):
         mask = cv2.inRange(hsvImage, color_range[0], color_range[1])
         contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if contours:
-            for contour in contours:
-                area = cv2.contourArea(contour)
-                if area > 1000:  # Minimum area threshold to consider
-                    x, y, w, h = cv2.boundingRect(contour)
-                    cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                    hsv_value = hsvImage[y + h // 2, x + w // 2]
-                    fruit_status = classify_color(hsv_value)
-                    fruit_size = classify_size(area)
 
-                    object_size_cm = area * conversion_factor
-                    cv2.putText(frame, f"{object_size_cm:.1f} cm", (x, y - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area > 1000:  # Filter out too small areas
+                x, y, w, h = cv2.boundingRect(contour)
+                fruit_type = classify_color(hsvImage[y + h // 2, x + w // 2])
+                fruit_size = classify_size(area)
 
-    ref_status.set(fruit_status)
-    ref_size.set(fruit_size)
-
-    cv2.putText(frame, f"Status: {fruit_status}", (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-    cv2.putText(frame, f"Size: {fruit_size}", (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+               
+                cv2.putText(frame,  f'{area:.1f} cm', (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+                cv2.putText(frame, f'Status: {fruit_type}', (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                cv2.putText(frame, f'Size: {fruit_size}', (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+                
+                update_database(fruit_type, fruit_size)
 
     cv2.imshow('frame', frame)
 
@@ -118,3 +85,7 @@ while True:
 
 cap.release()
 cv2.destroyAllWindows()
+
+
+
+# 
