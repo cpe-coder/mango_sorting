@@ -34,7 +34,6 @@ def update_database(fruit_type, fruit_size):
         print("Skipped updating database for unknown fruit type.")
         return 
     
-    # Check if the current mango is the same as the previous one
     if fruit_type != previous_fruit_type or fruit_size != previous_fruit_size:
         document = {
             "fruit_type": fruit_type,
@@ -42,7 +41,6 @@ def update_database(fruit_type, fruit_size):
         }
         collection.insert_one(document)
         
-        # Update the previous fruit type and size
         previous_fruit_type = fruit_type
         previous_fruit_size = fruit_size
 
