@@ -1,17 +1,13 @@
 import cv2
 import numpy as np
-from PIL import Image
-import firebase_admin
-from firebase_admin import credentials
-from firebase_admin import db
+from pymongo import MongoClient
 
-cred = credentials.Certificate("serviceAccountKey.json") 
-firebase_admin.initialize_app(cred, {
-    'databaseURL': 'https://mangosorting-default-rtdb.firebaseio.com/'
-})
+client = MongoClient('mongodb+srv://mango:mangosorting@cluster0.cfbv67j.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')  
+db = client['test']
+collection = db['mango_records']
 
-ripe_color_range = (np.array([15, 100, 100]), np.array([45, 255, 255]))  # Yellow range in HSV
-raw_color_range = (np.array([45, 100, 100]), np.array([85, 255, 255]))   # Green range in HSV
+ripe_color_range = (np.array([15, 100, 100]), np.array([45, 255, 255]))  
+raw_color_range = (np.array([45, 100, 100]), np.array([85, 255, 255]))   
 
 def classify_color(hsv_value):
     if ripe_color_range[0][0] <= hsv_value[0] <= ripe_color_range[1][0]:
@@ -21,25 +17,34 @@ def classify_color(hsv_value):
     return "Unknown"
 
 def classify_size(contour_area):
-    # Placeholder method for size classification based on contour area
-    # Change the size for real size of mango this is for test only
-    if contour_area < 10000:  # Placeholder values for small size
+    if contour_area < 10000:
         return "small"
-    elif 10000 <= contour_area <= 30000:  # Placeholder values for medium size
+    elif 10000 <= contour_area <= 30000:
         return "medium"
     else:
         return "large"
 
+previous_fruit_type = None
+previous_fruit_size = None
+
 def update_database(fruit_type, fruit_size):
+    global previous_fruit_type, previous_fruit_size
+    
     if fruit_type == "Unknown":
         print("Skipped updating database for unknown fruit type.")
         return 
-    maturity_status = {"Ripe": True, "Raw": False} if fruit_type == "Ripe" else {"Ripe": False, "Raw": True}
-    db.reference('/mango/1/ripe/maturity').set(maturity_status["Ripe"])
-    db.reference('/mango/1/raw/maturity').set(maturity_status["Raw"])
-    if maturity_status[fruit_type]:
-        size_path = f'/mango/1/{fruit_type.lower()}/size'
-        db.reference(size_path).set(fruit_size)
+    
+    # Check if the current mango is the same as the previous one
+    if fruit_type != previous_fruit_type or fruit_size != previous_fruit_size:
+        document = {
+            "fruit_type": fruit_type,
+            "fruit_size": fruit_size
+        }
+        collection.insert_one(document)
+        
+        # Update the previous fruit type and size
+        previous_fruit_type = fruit_type
+        previous_fruit_size = fruit_size
 
 valid_camera = False
 for camera_index in range(4):
@@ -55,7 +60,7 @@ if not valid_camera:
 while True:
     ret, frame = cap.read()
     if not ret:
-        break  # Break the loop if we can't get a frame
+        break  
 
     hsvImage = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
@@ -65,7 +70,7 @@ while True:
 
         for contour in contours:
             area = cv2.contourArea(contour)
-            if area > 1000:  # Filter out too small areas
+            if area > 1000:  
                 x, y, w, h = cv2.boundingRect(contour)
                 fruit_type = classify_color(hsvImage[y + h // 2, x + w // 2])
                 fruit_size = classify_size(area)
@@ -85,7 +90,3 @@ while True:
 
 cap.release()
 cv2.destroyAllWindows()
-
-
-
-# 
