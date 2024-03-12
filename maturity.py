@@ -4,7 +4,8 @@ from pymongo import MongoClient
 
 client = MongoClient('mongodb+srv://mango:mangosorting@cluster0.cfbv67j.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')  
 db = client['test']
-collection = db['mango_records']
+collection_ripe = db['ripe_mangoes']
+collection_raw = db['raw_mangoes']
 
 ripe_color_range = (np.array([15, 100, 100]), np.array([45, 255, 255]))  
 raw_color_range = (np.array([45, 100, 100]), np.array([85, 255, 255]))   
@@ -34,13 +35,18 @@ def update_database(fruit_type, fruit_size):
         print("Skipped updating database for unknown fruit type.")
         return 
     
+    # Check if the current mango is the same as the previous one
     if fruit_type != previous_fruit_type or fruit_size != previous_fruit_size:
         document = {
             "fruit_type": fruit_type,
             "fruit_size": fruit_size
         }
-        collection.insert_one(document)
+        if fruit_type == "Ripe":
+            collection_ripe.insert_one(document)
+        elif fruit_type == "Raw":
+            collection_raw.insert_one(document)
         
+        # Update the previous fruit type and size
         previous_fruit_type = fruit_type
         previous_fruit_size = fruit_size
 
@@ -62,26 +68,32 @@ while True:
 
     hsvImage = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
-    for color_range, label in zip([ripe_color_range, raw_color_range], ["Ripe", "Raw"]):
-        mask = cv2.inRange(hsvImage, color_range[0], color_range[1])
-        contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # Detect contours in the frame
+    mask = cv2.inRange(hsvImage, ripe_color_range[0], ripe_color_range[1]) | cv2.inRange(hsvImage, raw_color_range[0], raw_color_range[1])
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        for contour in contours:
+    for contour in contours:
+        # Compute the bounding box for each contour
+        x, y, w, h = cv2.boundingRect(contour)
+        center_x = x + w // 2
+        center_y = y + h // 2
+        frame_height, frame_width = frame.shape[:2]
+
+        # Check if the mango is centered in the frame
+        if (frame_width * 0.4 < center_x < frame_width * 0.6) and (frame_height * 0.4 < center_y < frame_height * 0.6):
             area = cv2.contourArea(contour)
             if area > 1000:  
-                x, y, w, h = cv2.boundingRect(contour)
-                fruit_type = classify_color(hsvImage[y + h // 2, x + w // 2])
+                fruit_type = classify_color(hsvImage[center_y, center_x])
                 fruit_size = classify_size(area)
 
                 cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-               
                 cv2.putText(frame,  f'{area:.1f} cm', (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                 cv2.putText(frame, f'Status: {fruit_type}', (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                 cv2.putText(frame, f'Size: {fruit_size}', (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                 
                 update_database(fruit_type, fruit_size)
 
-    cv2.imshow('frame', frame)
+    cv2.imshow('Mango Detection', frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
