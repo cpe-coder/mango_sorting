@@ -3,15 +3,25 @@ import numpy as np
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db
+from pymongo import MongoClient
 
+# Initialize Firebase
 cred = credentials.Certificate("serviceAccountKey.json") 
 firebase_admin.initialize_app(cred, {
     'databaseURL': 'https://mangosorting-default-rtdb.firebaseio.com/'
 })
 
+# Initialize MongoDB client and database
+mongo_client = MongoClient('mongodb+srv://mango:mangosorting@cluster0.cfbv67j.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')
+mongo_db = mongo_client['test']
+mongo_collection_ripe = mongo_db['ripe_mangoes']
+mongo_collection_raw = mongo_db['raw_mangoes']
+
+# Define color ranges
 ripe_color_range = (np.array([15, 100, 100]), np.array([45, 255, 255]))  # Yellow range in HSV
 raw_color_range = (np.array([45, 100, 100]), np.array([85, 255, 255]))   # Green range in HSV
 
+# Function to classify color based on HSV value
 def classify_color(hsv_value):
     if ripe_color_range[0][0] <= hsv_value[0] <= ripe_color_range[1][0]:
         return "Ripe"
@@ -19,6 +29,7 @@ def classify_color(hsv_value):
         return "Raw"
     return "Unknown"
 
+# Function to classify size based on contour area
 def classify_size(contour_area):
     if contour_area < 10000:
         return "small"
@@ -27,7 +38,12 @@ def classify_size(contour_area):
     else:
         return "large"
 
-def update_database(fruit_type, fruit_size):
+# Function to save data to MongoDB
+def save_to_mongodb(collection, data):
+    collection.insert_one(data)
+
+# Function to save data to Firebase Realtime Database
+def save_to_firebase(fruit_type, fruit_size):
     if fruit_type == "Unknown":
         print("Skipped updating database for unknown fruit type.")
         return 
@@ -38,6 +54,7 @@ def update_database(fruit_type, fruit_size):
         size_path = f'/mango/1/{fruit_type.lower()}/size'
         db.reference(size_path).set(fruit_size)
 
+# Check camera availability
 valid_camera = False
 for camera_index in range(4):
     cap = cv2.VideoCapture(camera_index)
@@ -52,6 +69,7 @@ if not valid_camera:
 previous_fruit_type = None
 previous_fruit_size = None
 
+# Main loop
 while True:
     ret, frame = cap.read()
     if not ret:
@@ -82,7 +100,8 @@ while True:
                     cv2.putText(frame, f'Size: {fruit_size}', (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                     
                     if fruit_type != previous_fruit_type or fruit_size != previous_fruit_size:
-                        update_database(fruit_type, fruit_size)
+                        save_to_mongodb(mongo_collection_ripe if fruit_type == "Ripe" else mongo_collection_raw, {"fruit_type": fruit_type, "fruit_size": fruit_size})
+                        save_to_firebase(fruit_type, fruit_size)
                         previous_fruit_type = fruit_type
                         previous_fruit_size = fruit_size
 
