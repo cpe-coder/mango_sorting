@@ -81,7 +81,7 @@ while True:
 
                     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
                     cv2.putText(frame, f'Status: {fruit_type}', (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                    
+                    print("Status: ", fruit_type)
                     if fruit_type != previous_fruit_type:
                         # save_to_mongodb(mongo_collection_ripe if fruit_type == "Ripe" else mongo_collection_raw, {"fruit_type": fruit_type, "fruit_size": fruit_size})
                         save_to_firebase(fruit_type)
