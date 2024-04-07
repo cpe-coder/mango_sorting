@@ -3,7 +3,6 @@ import numpy as np
 import firebase_admin
 from firebase_admin import credentials
 from firebase_admin import db
-from pymongo import MongoClient
 
 # Initialize Firebase
 cred = credentials.Certificate("serviceAccountKey.json") 
@@ -12,10 +11,10 @@ firebase_admin.initialize_app(cred, {
 })
 
 # Initialize MongoDB client and database
-mongo_client = MongoClient('mongodb+srv://mango:mangosorting@cluster0.cfbv67j.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')
-mongo_db = mongo_client['test']
-mongo_collection_ripe = mongo_db['ripe_mangoes']
-mongo_collection_raw = mongo_db['raw_mangoes']
+# mongo_client = MongoClient('mongodb+srv://mango:mangosorting@cluster0.cfbv67j.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0')
+# mongo_db = mongo_client['test']
+# mongo_collection_ripe = mongo_db['ripe_mangoes']
+# mongo_collection_raw = mongo_db['raw_mangoes']
 
 # Define color ranges
 ripe_color_range = (np.array([15, 100, 100]), np.array([45, 255, 255]))  # Yellow range in HSV
@@ -29,30 +28,19 @@ def classify_color(hsv_value):
         return "Raw"
     return "Unknown"
 
-# Function to classify size based on contour area
-def classify_size(contour_area):
-    if contour_area < 10000:
-        return "small"
-    elif 10000 <= contour_area <= 30000:
-        return "medium"
-    else:
-        return "large"
 
 # Function to save data to MongoDB
-def save_to_mongodb(collection, data):
-    collection.insert_one(data)
+# def save_to_mongodb(collection, data):
+    # collection.insert_one(data)
 
 # Function to save data to Firebase Realtime Database
-def save_to_firebase(fruit_type, fruit_size):
+def save_to_firebase(fruit_type):
     if fruit_type == "Unknown":
         print("Skipped updating database for unknown fruit type.")
         return 
     maturity_status = {"Ripe": True, "Raw": False} if fruit_type == "Ripe" else {"Ripe": False, "Raw": True}
-    db.reference('/mango/1/ripe/maturity').set(maturity_status["Ripe"])
-    db.reference('/mango/1/raw/maturity').set(maturity_status["Raw"])
-    if maturity_status[fruit_type]:
-        size_path = f'/mango/1/{fruit_type.lower()}/size'
-        db.reference(size_path).set(fruit_size)
+    db.reference('/mango/1/ripe').set(maturity_status["Ripe"])
+    db.reference('/mango/1/raw').set(maturity_status["Raw"])
 
 # Check camera availability
 valid_camera = False
@@ -67,7 +55,6 @@ if not valid_camera:
     exit()
 
 previous_fruit_type = None
-previous_fruit_size = None
 
 # Main loop
 while True:
@@ -91,21 +78,15 @@ while True:
 
                 if (frame_width * 0.4 < center_x < frame_width * 0.6) and (frame_height * 0.4 < center_y < frame_height * 0.6):
                     fruit_type = classify_color(hsvImage[center_y, center_x])
-                    fruit_size = classify_size(area)
 
                     cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-                   
-                    cv2.putText(frame,  f'{area:.1f} cm', (x, y - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
                     cv2.putText(frame, f'Status: {fruit_type}', (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-                    cv2.putText(frame, f'Size: {fruit_size}', (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
                     
-                    if fruit_type != previous_fruit_type or fruit_size != previous_fruit_size:
-                        save_to_mongodb(mongo_collection_ripe if fruit_type == "Ripe" else mongo_collection_raw, {"fruit_type": fruit_type, "fruit_size": fruit_size})
-                        save_to_firebase(fruit_type, fruit_size)
+                    if fruit_type != previous_fruit_type:
+                        # save_to_mongodb(mongo_collection_ripe if fruit_type == "Ripe" else mongo_collection_raw, {"fruit_type": fruit_type, "fruit_size": fruit_size})
+                        save_to_firebase(fruit_type)
                         previous_fruit_type = fruit_type
-                        previous_fruit_size = fruit_size
-
-    cv2.imshow('frame', frame)
+    cv2.imshow('Mango Maturity', frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
