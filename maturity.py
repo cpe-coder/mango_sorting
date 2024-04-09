@@ -38,10 +38,10 @@ def save_to_firebase(fruit_type):
     if fruit_type == "Unknown":
         print("Skipped updating database for unknown fruit type.")
         return 
-    maturity_status = {"Ripe": True, "Raw": False} if fruit_type == "Ripe" else {"Ripe": False, "Raw": True}
-    db.reference('/mango/1/ripe').set(maturity_status["Ripe"])
-    db.reference('/mango/1/raw').set(maturity_status["Raw"])
-
+    maturity_status = True if fruit_type == "Ripe" else False
+    db.reference('/mango/1/maturity').set(maturity_status)
+    print(f"Maturity status set to {maturity_status} for fruit type {fruit_type}.")
+    
 # Check camera availability
 valid_camera = False
 for camera_index in range(4):
