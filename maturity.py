@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import cv2
 import numpy as np
 import firebase_admin
@@ -93,3 +95,4 @@ while True:
 
 cap.release()
 cv2.destroyAllWindows()
+
