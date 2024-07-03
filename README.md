@@ -43,15 +43,16 @@
 ```ruby
    @echo off
    REM Change to the directory where the Python script is located
-   cd /d "path where your .py code is indicated"
+   cd /d "%USERPROFILE%\Desktop\mango_sorting"
 
    REM Activate virtual environment
-   call "path\venv\Scripts\activate.bat"
+   call "%USERPROFILE%\Desktop\mango_sorting\venv\Scripts\activate.bat"
 
    REM Run the Python script
-   python file.py
+   python maturity.py
 
    pause
+
 
 ```
 
